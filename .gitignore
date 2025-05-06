@@ -172,3 +172,11 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+# Visual Studio Code
+.vscode/
+
+# Gymnasium / Gym outputs
+videos/
+results/
+
