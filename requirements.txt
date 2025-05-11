@@ -4,3 +4,5 @@ gymnasium==1.1.1
 numpy==2.2.5
 pygame==2.6.1
 typing_extensions==4.13.2
+box2d-py==2.3.5
+swig==4.3.1
