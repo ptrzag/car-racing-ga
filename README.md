@@ -1,13 +1,13 @@
-# Car Racing RL
-Reinforcement Learning project using the "CarRacing-v3" environment from Gymnasium.
+# Car Racing GA
+Genetic Algorithm project using the "CarRacing-v3" environment from Gymnasium.
 
 ## Installation
 1. Clone the repository:
 ```
-  git clone https://github.com/YOUR_USERNAME/car-racing-rl.git
+  git clone https://github.com/YOUR_USERNAME/car-racing-ga.git
 ```
 ```
-  cd car-racing-rl
+  cd car-racing-ga
 ```
 3. Create virtual environment:
 ```
