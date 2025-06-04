@@ -93,9 +93,23 @@ def compute_front_distance(mask: np.ndarray) -> float:
 def extract_distances(obs_frame: np.ndarray) -> np.ndarray:
     hsv = to_hsv(obs_frame)
     mask = mask_asphalt(hsv)
-    d_left_norm, d_right_norm = compute_horizontal_distances(mask)
-    d_front_norm = compute_front_distance(mask)
-    return np.array([d_left_norm, d_right_norm, d_front_norm], dtype=np.float32)
+
+    height, width = mask.shape
+    center_x = width // 2
+    positions = [-40, -30, -20, -10, 0, 10, 20, 30, 40]
+    distances = []
+
+    for offset in positions:
+        x = np.clip(center_x + offset, 0, width - 1)
+        col = mask[:, x]
+        white_indices = np.where(col == 255)[0]
+        if white_indices.size == 0:
+            distances.append(0.0)
+        else:
+            norm_dist = (height - 1 - white_indices[0]) / float(height - 1)
+            distances.append(np.clip(norm_dist, 0.0, 1.0))
+
+    return np.array(distances, dtype=np.float32)
 
 
 def is_on_grass(obs_frame: np.ndarray) -> bool:

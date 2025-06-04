@@ -12,24 +12,19 @@ class Car:
         self.disqualified: bool = False
 
     def decide(self, distances: np.ndarray) -> np.ndarray:
-        if not isinstance(distances, np.ndarray) or distances.shape != (3,):
-            raise ValueError("distances must be numpy.ndarray of shape (3,)")
+        if not isinstance(distances, np.ndarray) or distances.shape != (9,):
+            raise ValueError("distances must be numpy.ndarray of shape (9,)")
 
-        d_left, d_right, d_front = distances
+        # Ensure weights length = 9 * 3 = 27 (9 for steering, 9 for gas, 9 for brake)
+        if self.weights.shape[0] != 27:
+            raise ValueError("weights vector must have 27 values for 9 inputs")
 
-        # Steering: tanh(w0 * (d_right - d_left)) → w ∈ [-1, 1]
-        raw_steer = self.weights[0] * (d_right - d_left)
-        steering = np.tanh(raw_steer)
+        w = self.weights
+        steer_raw = np.tanh(np.dot(w[0:9], distances))  # steering ∈ [-1, 1]
+        gas_raw = 1.0 / (1.0 + np.exp(-np.dot(w[9:18], distances)))  # sigmoid
+        brake_raw = 1.0 / (1.0 + np.exp(-np.dot(w[18:27], distances)))  # sigmoid
 
-        # Gas: sigmoid(w1 * d_front) → w ∈ [0, 1]
-        raw_gas = self.weights[1] * d_front
-        gas = 1.0 / (1.0 + np.exp(-raw_gas))
-
-        # Brake: sigmoid(w2 * (1 - d_front)) → w ∈ [0, 1]
-        raw_brake = self.weights[2] * (1.0 - d_front)
-        brake = 1.0 / (1.0 + np.exp(-raw_brake))
-
-        return np.array([steering, gas, brake], dtype=np.float32)
+        return np.array([steer_raw, gas_raw, brake_raw], dtype=np.float32)
 
     def to_json(self) -> dict:
         return {
