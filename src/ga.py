@@ -9,6 +9,7 @@ from env_utils import make_env
 
 
 def evaluate_individual(args):
+    print("evaaluate_individual")
     """
     Helper function for multiprocessing that evaluates one Car instance.
     Creates its own environment to avoid sharing issues.
@@ -26,7 +27,9 @@ def evaluate_individual(args):
         min_speed=min_speed,
         speed_penalty_scale=speed_penalty_scale
     )
+    print(f"{fitness=}")
     env.close()
+    print(f"{fitness=}")
     return fitness
 
 
@@ -111,6 +114,7 @@ def run_ga(
             )
             for car in population
         ]
+        print("cos")
         fitnesses = pool.map(evaluate_individual, eval_args)
 
         # Assign fitnesses back to cars

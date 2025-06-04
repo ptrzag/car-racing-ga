@@ -12,6 +12,7 @@ class Car:
         self.disqualified: bool = False
 
     def decide(self, distances: np.ndarray) -> np.ndarray:
+        
         if not isinstance(distances, np.ndarray) or distances.shape != (9,):
             raise ValueError("distances must be numpy.ndarray of shape (9,)")
 
@@ -21,6 +22,7 @@ class Car:
 
         w = self.weights
         steer_raw = np.tanh(np.dot(w[0:9], distances))  # steering ∈ [-1, 1]
+        # print(f"{w[0:9]=} {distances=} {steer_raw=}")
         gas_raw = 1.0 / (1.0 + np.exp(-np.dot(w[9:18], distances)))  # sigmoid
         brake_raw = 1.0 / (1.0 + np.exp(-np.dot(w[18:27], distances)))  # sigmoid
 

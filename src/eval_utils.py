@@ -41,9 +41,10 @@ def evaluate_car(
 
         # 1) Sprawdzenie odległości w 9 kierunkach
         distances = extract_distances(obs)
-
+        
         # 2) Decyzja agenta i wykonanie akcji
         action = car.decide(distances)
+        
         obs, reward, terminated, truncated, info = env.step(action)
 
         total_reward += reward
