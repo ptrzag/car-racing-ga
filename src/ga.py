@@ -71,7 +71,8 @@ def run_ga(
     seed: int | None = None,
     log_dir: str = "data",
     speed_penalty: bool = False,      
-    min_speed: float = 0.3,           
+    min_speed: float = 0.3,          
+    elite_count: int = 3, 
     speed_penalty_scale: float = 50.0
 ) -> tuple[Car, str]:
     rng = np.random.default_rng(seed=seed)
@@ -148,24 +149,32 @@ def run_ga(
         with open(gen_file, "w") as gf:
             json.dump(gen_record, gf, indent=2)
 
-        # Selection
+                # Elitism: retain the top `elite_count` individuals
+        sorted_population = sorted(population, key=lambda c: c.fitness, reverse=True)
+        elites = [Car(weights=c.weights.copy()) for c in sorted_population[:elite_count]]
+
+        # Selection for reproduction (excluding elites)
         parents: list[Car] = [
             tournament_selection(population, rng, k=3)
-            for _ in range(pop_size)
+            for _ in range(pop_size - elite_count)
         ]
 
-        # Crossbreeding and mutation → new population
+        # Crossbreeding and mutation
         rng.shuffle(parents)
-        new_population: list[Car] = []
-        for i in range(0, pop_size, 2):
+        new_population: list[Car] = elites.copy()
+
+        for i in range(0, len(parents), 2):
             parent1 = parents[i]
-            parent2 = parents[i + 1]
+            parent2 = parents[i + 1] if i + 1 < len(parents) else parents[i]
             child1, child2 = crossover(parent1, parent2, p_crossover, rng)
             mutate(child1, p_mutation, sigma, rng)
             mutate(child2, p_mutation, sigma, rng)
             new_population.extend([child1, child2])
+            if len(new_population) >= pop_size:
+                break
 
-        population = new_population
+        # Trim to exact population size
+        population = new_population[:pop_size]
 
     pool.close()
     pool.join()
