@@ -1,43 +1,33 @@
 # runner.py
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning, module="pygame.pkgdata")
 
 import json
 import argparse
+import numpy as np
+
 from agent import Car
 from eval_utils import evaluate_car
-from env_utils import make_env
 
-
-def run_single_car(path: str, max_steps: int = 1000, render: bool = True):
-    # Load saved car weights and metadata
-    with open(path, "r") as f:
+def main(best_json, max_steps, render, seed):
+    with open(best_json, "r") as f:
         data = json.load(f)
+    weights = np.array(data["weights"], dtype=np.float32)
+    car = Car(weights)
+    car.fitness      = data.get("fitness")
+    car.disqualified = data.get("disqualified", False)
 
-    # Recreate Car object
-    car = Car.from_json(data)
+    # Use seed from JSON if not provided
+    seed = seed if seed is not None else data.get("seed", None)
 
-    # Create environment with rendering
-    env = make_env(render=render)
-
-    # Evaluate the car (with rendering)
-    fitness = evaluate_car(
-        car=car,
-        env=env,
-        max_steps=max_steps,
-        render=render,
-        speed_penalty=True,         # Can be adjusted or made optional
-        min_speed=0.3,
-        speed_penalty_scale=50.0
-    )
-
-    print(f"Car fitness: {fitness:.2f}")
-    env.close()
-
+    fit = evaluate_car(car, max_steps=max_steps, seed=seed, render=render)
+    print(f"Runner fitness: {fit:.2f}")
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Run a trained car agent")
-    parser.add_argument("path", type=str, help="Path to saved car JSON (e.g., data/best_individual_gen300.json)")
-    parser.add_argument("--max_steps", type=int, default=1000, help="Max number of steps")
-    parser.add_argument("--no_render", action="store_true", help="Disable rendering")
-
-    args = parser.parse_args()
-    run_single_car(path=args.path, max_steps=args.max_steps, render=not args.no_render)
+    p = argparse.ArgumentParser()
+    p.add_argument("best_json", help="Path to best.json")
+    p.add_argument("--max_steps", type=int, default=1000)
+    p.add_argument("--no_render", action="store_true")
+    p.add_argument("--seed", type=int, default=None)
+    args = p.parse_args()
+    main(args.best_json, args.max_steps, not args.no_render, args.seed)

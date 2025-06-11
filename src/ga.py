@@ -1,247 +1,136 @@
-import json
+# ga.py
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning, module="pygame.pkgdata")
+
 import os
+import time
+import json
+import argparse
 import numpy as np
-import multiprocessing
+import multiprocessing as mp
 
 from agent import Car
 from eval_utils import evaluate_car
-from env_utils import make_env
+import config
 
-
-def evaluate_individual(args):
-    print("evaaluate_individual")
-    """
-    Helper function for multiprocessing that evaluates one Car instance.
-    Creates its own environment to avoid sharing issues.
-    """
-    car, max_steps, grass_penalty_per_frame, speed_penalty, min_speed, speed_penalty_scale, seed = args
-    env = make_env(render=False)
-    fitness = evaluate_car(
-        car=car,
-        env=env,
-        max_steps=max_steps,
-        seed=seed,
-        grass_penalty_per_frame=grass_penalty_per_frame,
-        render=False,
-        speed_penalty=speed_penalty,
-        min_speed=min_speed,
-        speed_penalty_scale=speed_penalty_scale
-    )
-    print(f"{fitness=}")
-    env.close()
-    print(f"{fitness=}")
-    return fitness
-
-
-def tournament_selection(population: list[Car], rng: np.random.Generator, k: int = 3) -> Car:
-    participants = rng.choice(population, size=k, replace=False)
-    return max(participants, key=lambda c: c.fitness)
-
-
-def crossover(parent1: Car, parent2: Car, p_crossover: float, rng: np.random.Generator) -> tuple[Car, Car]:
-    w1 = parent1.weights.copy()
-    w2 = parent2.weights.copy()
-    num_features = len(w1)
-
-    if rng.random() < p_crossover and num_features > 1:
-        cp = rng.integers(1, num_features)
-        child1_w = np.concatenate([w1[:cp], w2[cp:]])
-        child2_w = np.concatenate([w2[:cp], w1[cp:]])
-    else:
-        child1_w = w1.copy()
-        child2_w = w2.copy()
-
-    return Car(weights=child1_w), Car(weights=child2_w)
-
-
-def mutate(car: Car, p_mutation: float, sigma: float, rng: np.random.Generator):
-    for i in range(len(car.weights)):
-        if rng.random() < p_mutation:
-            car.weights[i] += rng.normal(0, sigma)
-            car.weights[i] = np.clip(car.weights[i], -1.0, 1.0)
-
+def save_generation(gen_idx: int, population: list[Car], folder: str):
+    data = [c.to_json() for c in population]
+    with open(os.path.join(folder, f"gen_{gen_idx}.json"), "w") as f:
+        json.dump(data, f, indent=2)
 
 def run_ga(
-    pop_size: int = 50,
-    num_generations: int = 300,
-    p_crossover: float = 0.8,
-    p_mutation: float = 0.1,
-    sigma: float = 0.2,
-    max_steps: int = 1000,
-    seed: int | None = None,
-    log_dir: str = "data",
-    speed_penalty: bool = False,      
-    min_speed: float = 0.3,          
-    elite_count: int = 3, 
-    speed_penalty_scale: float = 50.0
-) -> tuple[Car, str]:
-    rng = np.random.default_rng(seed=seed)
-    
-    # Create main log directory
-    os.makedirs(log_dir, exist_ok=True)
-    # Create a subdirectory for per-generation JSON files
-    gens_dir = os.path.join(log_dir, "generations")
-    os.makedirs(gens_dir, exist_ok=True)
+    pop_size: int = config.POP_SIZE,
+    num_generations: int = config.GENERATIONS,
+    p_crossover: float = config.P_CROSSOVER,
+    p_mutation: float = config.P_MUTATION,
+    sigma: float = config.SIGMA,
+    max_steps: int = config.MAX_STEPS,
+    seed: int | None = None
+) -> Car:
+    np.random.seed(seed)
 
-    stats_path = os.path.join(log_dir, "fitness_history.csv")
+    feat = 17 if config.USE_EXTENDED_DISTANCES else 9
+    weight_len = feat * 3
+    population = [Car(np.random.randn(weight_len)) for _ in range(pop_size)]
 
-    # Prepare a CSV file for statistics
-    with open(stats_path, "w") as sf:
-        sf.write("gen,avg_fitness,max_fitness,median_fitness,avg_w0,std_w0\n")
+    timestamp = time.strftime("%Y%m%d_%H%M")
+    out_folder = os.path.join("data", "generations", timestamp)
+    os.makedirs(out_folder, exist_ok=True)
 
-    # Population Initialization
-    population: list[Car] = [
-        Car(weights=rng.uniform(-1, 1, size=27))
-        for _ in range(pop_size)
-    ]
-
-    # Multiprocessing pool
-    pool = multiprocessing.Pool()
+    fitness_history: list[dict] = []
 
     for gen in range(num_generations):
-        print(f"--- Generation {gen} ---")
+        print(f"Generation {gen+1}/{num_generations}")
 
-        # Evaluation of each unit (parallel)
-        # Prepare arguments for each process
-        eval_args = [
-            (
-                car,
-                max_steps,
-                -50.0,  # grass_penalty_per_frame
-                True,  # speed_penalty (always True during GA)
-                0.3,   # min_speed
-                100.0, # speed_penalty_scale
-                seed
-            )
-            for car in population
-        ]
-        print("cos")
-        fitnesses = pool.map(evaluate_individual, eval_args)
-
-        # Assign fitnesses back to cars
+        with mp.Pool() as pool:
+            args = [(car, max_steps, seed, False) for car in population]
+            fitnesses = pool.starmap(evaluate_car, args)
         for car, fit in zip(population, fitnesses):
             car.fitness = fit
 
-        avg_fit = float(np.mean(fitnesses))
-        max_fit = float(np.max(fitnesses))
-        med_fit = float(np.median(fitnesses))
+        population.sort(key=lambda c: c.fitness, reverse=True)
+        scores = [c.fitness for c in population]
 
-        weights_matrix = np.array([c.weights for c in population])
-        avg_w0 = float(np.mean(weights_matrix[:, 0]))
-        std_w0 = float(np.std(weights_matrix[:, 0]))
+        # filter out disqualified (-inf) values
+        valid = [s for s in scores if np.isfinite(s)]
+        if valid:
+            max_f  = float(np.max(valid))
+            mean_f = float(np.mean(valid))
+            min_f  = float(np.min(valid))
+        else:
+            # everyone disqualified? fall back to -inf
+            max_f = mean_f = min_f = float('-inf')
 
-        # Saving statistics to CSV
-        with open(stats_path, "a") as sf:
-            sf.write(f"{gen},{avg_fit:.5f},{max_fit:.5f},{med_fit:.5f},{avg_w0:.5f},{std_w0:.5f}\n")
+        print(f"  max={max_f:.2f}, mean={mean_f:.2f}, min={min_f:.2f}")
 
-         # Prepare this generation's JSON record
-        gen_record = []
-        for idx, car in enumerate(population):
-            gen_record.append({
-                "id": idx,
-                "weights": car.weights.tolist(),
-                "fitness": float(car.fitness),
-                "disqualified": bool(car.disqualified)
-            })
+        fitness_history.append({
+            "generation": gen,
+            "max": max_f,
+            "mean": mean_f,
+            "min": min_f
+        })
 
-        # Write to a separate file per generation
-        gen_file = os.path.join(gens_dir, f"generation_{gen}.json")
-        with open(gen_file, "w") as gf:
-            json.dump(gen_record, gf, indent=2)
+        save_generation(gen, population, out_folder)
 
-                # Elitism: retain the top `elite_count` individuals
-        sorted_population = sorted(population, key=lambda c: c.fitness, reverse=True)
-        elites = [Car(weights=c.weights.copy()) for c in sorted_population[:elite_count]]
+        new_pop = [population[0]]
+        while len(new_pop) < pop_size:
+            p1 = tournament_selection(population)
+            p2 = tournament_selection(population)
+            if np.random.rand() < p_crossover:
+                c1_w, c2_w = crossover(p1.weights, p2.weights)
+            else:
+                c1_w, c2_w = p1.weights.copy(), p2.weights.copy()
+            if np.random.rand() < p_mutation:
+                c1_w = mutate(c1_w, sigma)
+            if np.random.rand() < p_mutation:
+                c2_w = mutate(c2_w, sigma)
+            new_pop.append(Car(c1_w))
+            if len(new_pop) < pop_size:
+                new_pop.append(Car(c2_w))
+        population = new_pop
 
-        # Selection for reproduction (excluding elites)
-        parents: list[Car] = [
-            tournament_selection(population, rng, k=3)
-            for _ in range(pop_size - elite_count)
-        ]
+    best = population[0]
+    best_data = best.to_json()
+    best_data["seed"] = seed  # Save the seed for reproducibility
+    with open(os.path.join(out_folder, "best.json"), "w") as f:
+        json.dump(best.to_json(), f, indent=2)
 
-        # Crossbreeding and mutation
-        rng.shuffle(parents)
-        new_population: list[Car] = elites.copy()
+    with open(os.path.join(out_folder, "fitness_history.json"), "w") as f:
+        json.dump(fitness_history, f, indent=2)
 
-        for i in range(0, len(parents), 2):
-            parent1 = parents[i]
-            parent2 = parents[i + 1] if i + 1 < len(parents) else parents[i]
-            child1, child2 = crossover(parent1, parent2, p_crossover, rng)
-            mutate(child1, p_mutation, sigma, rng)
-            mutate(child2, p_mutation, sigma, rng)
-            new_population.extend([child1, child2])
-            if len(new_population) >= pop_size:
-                break
+    print(f"All outputs saved to: {out_folder}")
+    return best
 
-        # Trim to exact population size
-        population = new_population[:pop_size]
+def crossover(a: np.ndarray, b: np.ndarray):
+    pt = np.random.randint(1, len(a)-1)
+    return (np.concatenate([a[:pt], b[pt:]]),
+            np.concatenate([b[:pt], a[pt:]]))
 
-    pool.close()
-    pool.join()
+def mutate(w: np.ndarray, sigma: float):
+    return w + np.random.normal(0, sigma, size=w.shape)
 
-    # Last generation evaluation (serial, or could also parallelize similarly)
-    for car in population:
-        _ = evaluate_car(
-            car, env=make_env(render=False),
-            max_steps=max_steps,
-            seed=seed,
-            speed_penalty=speed_penalty,
-            min_speed=min_speed,
-            speed_penalty_scale=speed_penalty_scale
-        )
+def tournament_selection(pop: list[Car], k: int = 3) -> Car:
+    candidates = np.random.choice(pop, k)
+    return max(candidates, key=lambda c: c.fitness)
 
-    # Save the best agent
-    best_car = max(population, key=lambda c: c.fitness)
-    best_path = os.path.join(log_dir, f"best_individual_gen{num_generations}.json")
-    with open(best_path, "w") as bf:
-        json.dump(best_car.to_json(), bf, indent=2)
-
-    print(f"All per-generation files saved in: {gens_dir}")
-    print(f"Best agent from gen {num_generations} saved: {best_path}")
-    return best_car, best_path
+def parse_args():
+    p = argparse.ArgumentParser()
+    p.add_argument("--pop_size", type=int, default=config.POP_SIZE)
+    p.add_argument("--generations", type=int, default=config.GENERATIONS)
+    p.add_argument("--p_crossover", type=float, default=config.P_CROSSOVER)
+    p.add_argument("--p_mutation", type=float, default=config.P_MUTATION)
+    p.add_argument("--sigma", type=float, default=config.SIGMA)
+    p.add_argument("--max_steps", type=int, default=config.MAX_STEPS)
+    return p.parse_args()
 
 
 if __name__ == "__main__":
-    import argparse
-
-    parser = argparse.ArgumentParser(description="Launch GA for CarRacing")
-    parser.add_argument("--pop_size", type=int, default=50)
-    parser.add_argument("--generations", type=int, default=300)
-    parser.add_argument("--p_crossover", type=float, default=0.8)
-    parser.add_argument("--p_mutation", type=float, default=0.1)
-    parser.add_argument("--sigma", type=float, default=0.2)
-    parser.add_argument("--max_steps", type=int, default=1000)
-    parser.add_argument("--seed", type=int, default=None)
-    parser.add_argument("--log_dir", type=str, default="data")
-    parser.add_argument(
-        "--speed_penalty",
-        action="store_true",
-        help="Włącz karę za zbyt niską średnią prędkość"
-    )
-    parser.add_argument(
-        "--min_speed",
-        type=float,
-        default=0.3,
-        help="Minimalna średnia prędkość: poniżej tego = kara"
-    )
-    parser.add_argument(
-        "--speed_penalty_scale",
-        type=float,
-        default=50.0,
-        help="Skala kary za prędkość poniżej min_speed"
-    )
-    args = parser.parse_args()
-
+    args = parse_args()
     run_ga(
         pop_size=args.pop_size,
         num_generations=args.generations,
         p_crossover=args.p_crossover,
         p_mutation=args.p_mutation,
         sigma=args.sigma,
-        max_steps=args.max_steps,
-        seed=args.seed,
-        log_dir=args.log_dir,
-        speed_penalty=args.speed_penalty,
-        min_speed=args.min_speed,
-        speed_penalty_scale=args.speed_penalty_scale
+        max_steps=args.max_steps
     )
