@@ -1,0 +1,32 @@
+[
+  {
+    "generation": 0,
+    "max": -Infinity,
+    "mean": -Infinity,
+    "min": -Infinity
+  },
+  {
+    "generation": 1,
+    "max": -Infinity,
+    "mean": -Infinity,
+    "min": -Infinity
+  },
+  {
+    "generation": 2,
+    "max": -9.249929428100586,
+    "mean": -49.65767574310303,
+    "min": -90.06542205810547
+  },
+  {
+    "generation": 3,
+    "max": -86.91473388671875,
+    "mean": -88.87221145629883,
+    "min": -90.8296890258789
+  },
+  {
+    "generation": 4,
+    "max": 16.541078567504883,
+    "mean": -54.911221186319985,
+    "min": -91.44503784179688
+  }
+]
