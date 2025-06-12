@@ -14,9 +14,9 @@ MAX_GRASS_FRAMES = 50      # Disqualify after this many consecutive grass frames
 
 # Speed penalties & rewards
 SPEED_PENALTY = True
-MIN_SPEED = 2.0
-SPEED_PENALTY_SCALE = 1.0
-SPEED_BONUS = 0.5          # Positive reward factor for avg speed
+MIN_SPEED = 3.0
+SPEED_PENALTY_SCALE = 2.0
+SPEED_BONUS = 2.0         # Positive reward factor for avg speed
 
 # Always use extended distances (17 inputs)
 USE_EXTENDED_DISTANCES = True
