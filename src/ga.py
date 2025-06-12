@@ -37,6 +37,20 @@ def run_ga(
     out_folder = os.path.join("data", "generations", timestamp)
     os.makedirs(out_folder, exist_ok=True)
 
+    # Save global config metadata
+    meta = {
+        "timestamp": timestamp,
+        "pop_size": pop_size,
+        "generations": num_generations,
+        "p_crossover": p_crossover,
+        "p_mutation": p_mutation,
+        "sigma": sigma,
+        "max_steps": max_steps,
+        "seed": seed
+    }
+    with open(os.path.join(out_folder, "meta.json"), "w") as f:
+        json.dump(meta, f, indent=2)
+
     fitness_history: list[dict] = []
 
     for gen in range(num_generations):
