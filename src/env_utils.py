@@ -1,13 +1,12 @@
-# env_utils.py
-
 import numpy as np
 import cv2
 
-# HSV thresholds
+# Cached constants
 ASPHALT_LOWER = np.array([0, 0, 50], dtype=np.uint8)
 ASPHALT_UPPER = np.array([180, 30, 150], dtype=np.uint8)
 GRASS_LOWER   = np.array([55, 50, 50], dtype=np.uint8)
 GRASS_UPPER   = np.array([65, 255, 255], dtype=np.uint8)
+ANGLES = np.array([-60, -30, 0, 30, 60], dtype=np.float32)
 
 def to_hsv(frame: np.ndarray) -> np.ndarray:
     bgr = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
