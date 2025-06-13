@@ -2,9 +2,9 @@
 
 # GA hyperparameters
 POP_SIZE = 20
-GENERATIONS = 10
+GENERATIONS = 15
 P_CROSSOVER = 0.9
-P_MUTATION = 0.025
+P_MUTATION = 0.2
 SIGMA = 0.5
 
 # Simulation settings
@@ -20,3 +20,4 @@ SPEED_BONUS = 2.0         # Positive reward factor for avg speed
 
 # Always use extended distances (17 inputs)
 USE_EXTENDED_DISTANCES = True
+ELITE_COUNT = 1  # or maybe 2

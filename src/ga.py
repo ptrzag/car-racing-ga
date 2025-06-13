@@ -8,15 +8,31 @@ import json
 import argparse
 import numpy as np
 import multiprocessing as mp
+from typing import Optional
 
 from agent import Car
 from eval_utils import evaluate_car
 import config
 
+
 def save_generation(gen_idx: int, population: list[Car], folder: str):
     data = [c.to_json() for c in population]
     with open(os.path.join(folder, f"gen_{gen_idx}.json"), "w") as f:
         json.dump(data, f, indent=2)
+
+def population_diversity(pop: list[Car]) -> float:
+    # Average pairwise Euclidean distance between weights
+    weights = np.array([c.weights for c in pop])
+    n = len(weights)
+    if n < 2:
+        return 0.0
+    dist_sum = 0.0
+    count = 0
+    for i in range(n):
+        for j in range(i+1, n):
+            dist_sum += np.linalg.norm(weights[i] - weights[j])
+            count += 1
+    return dist_sum / count
 
 def run_ga(
     pop_size: int = config.POP_SIZE,
@@ -25,13 +41,15 @@ def run_ga(
     p_mutation: float = config.P_MUTATION,
     sigma: float = config.SIGMA,
     max_steps: int = config.MAX_STEPS,
-    seed: int | None = None
+    seed: Optional[int] = None
 ) -> Car:
-    np.random.seed(seed)
+    if seed is None:
+        seed = int.from_bytes(os.urandom(4), "little")
+    rng = np.random.default_rng(seed)
 
     feat = 17 if config.USE_EXTENDED_DISTANCES else 9
     weight_len = feat * 3
-    population = [Car(np.random.randn(weight_len)) for _ in range(pop_size)]
+    population = [Car(rng.standard_normal(weight_len)) for _ in range(pop_size)]
 
     timestamp = time.strftime("%Y%m%d_%H%M")
     out_folder = os.path.join("data", "generations", timestamp)
@@ -53,6 +71,11 @@ def run_ga(
 
     fitness_history: list[dict] = []
 
+    # Set multiprocessing start method to spawn for safety (especially on Windows)
+    mp.set_start_method('spawn', force=True)
+
+    prev_elite_hash = None
+    
     for gen in range(num_generations):
         print(f"Generation {gen+1}/{num_generations}")
 
@@ -77,6 +100,13 @@ def run_ga(
 
         print(f"  max={max_f:.2f}, mean={mean_f:.2f}, min={min_f:.2f}")
 
+        diversity = population_diversity(population)
+        print(f"  diversity={diversity:.4f}")
+        unique_hashes = set(hash_agent(agent) for agent in population)
+        print(f"Unique agents: {len(unique_hashes)} / {len(population)}")
+        if diversity < 0.01:
+            print("  Warning: population diversity is very low, may cause premature convergence")
+
         fitness_history.append({
             "generation": gen,
             "max": max_f,
@@ -86,28 +116,55 @@ def run_ga(
 
         save_generation(gen, population, out_folder)
 
-        new_pop = [population[0]]
+
+        elites = population[:config.ELITE_COUNT]
+        new_pop = []
+        for elite in elites:
+            new_pop.append(elite)
+            mutated_weights = mutate(elite.weights.copy(), sigma * rng.uniform(1.0, 2.0), rng)
+            new_pop.append(Car(mutated_weights))
+            best_elite = population[0]
+
+        elite_hash = hash_agent(best_elite)
+
+        if elite_hash != prev_elite_hash:
+            new_pop.append(best_elite)
+            prev_elite_hash = elite_hash
+        else:
+            # mutate instead of copying same elite again
+            mutated_weights = mutate(best_elite.weights.copy(), sigma, rng)
+            new_pop.append(Car(mutated_weights))
+
         while len(new_pop) < pop_size:
-            p1 = tournament_selection(population)
-            p2 = tournament_selection(population)
-            if np.random.rand() < p_crossover:
-                c1_w, c2_w = crossover(p1.weights, p2.weights)
+            if rng.random() < 0.1:
+                new_pop.append(Car(rng.standard_normal(weight_len)))
             else:
-                c1_w, c2_w = p1.weights.copy(), p2.weights.copy()
-            if np.random.rand() < p_mutation:
-                c1_w = mutate(c1_w, sigma)
-            if np.random.rand() < p_mutation:
-                c2_w = mutate(c2_w, sigma)
-            new_pop.append(Car(c1_w))
-            if len(new_pop) < pop_size:
-                new_pop.append(Car(c2_w))
+                p1 = tournament_selection(population, rng)
+                p2 = tournament_selection(population, rng)
+                if rng.random() < p_crossover:
+                    c1_w, c2_w = crossover(p1.weights, p2.weights, rng)
+                else:
+                    c1_w, c2_w = p1.weights.copy(), p2.weights.copy()
+
+                diversity_threshold = 1.0  # define a sensible threshold
+                mutation_boost = 0.2 if diversity < diversity_threshold else 0.0
+
+                if rng.random() < p_mutation + mutation_boost:
+                    c1_w = mutate(c1_w, sigma, rng)
+                if rng.random() < p_mutation + mutation_boost:
+                    c2_w = mutate(c2_w, sigma, rng)
+
+                new_pop.append(Car(c1_w))
+                if len(new_pop) < pop_size:
+                    new_pop.append(Car(c2_w))
         population = new_pop
+
 
     best = population[0]
     best_data = best.to_json()
     best_data["seed"] = seed  # Save the seed for reproducibility
     with open(os.path.join(out_folder, "best.json"), "w") as f:
-        json.dump(best.to_json(), f, indent=2)
+        json.dump(best_data, f, indent=2)
 
     with open(os.path.join(out_folder, "fitness_history.json"), "w") as f:
         json.dump(fitness_history, f, indent=2)
@@ -115,16 +172,22 @@ def run_ga(
     print(f"All outputs saved to: {out_folder}")
     return best
 
-def crossover(a: np.ndarray, b: np.ndarray):
-    pt = np.random.randint(1, len(a)-1)
-    return (np.concatenate([a[:pt], b[pt:]]),
-            np.concatenate([b[:pt], a[pt:]]))
+def crossover(parent1, parent2, rng):
+    # e.g., single-point crossover
+    point = rng.integers(1, len(parent1) - 1)
+    child1 = np.concatenate([parent1[:point], parent2[point:]])
+    child2 = np.concatenate([parent2[:point], parent1[point:]])
+    return child1, child2
 
-def mutate(w: np.ndarray, sigma: float):
-    return w + np.random.normal(0, sigma, size=w.shape)
+def mutate(w: np.ndarray, sigma: float, rng: np.random.Generator):
+    noise = rng.uniform(-1, 1, size=w.shape)
+    t_noise = np.arctan(np.pi * noise)  # range approx (-π/2, π/2)
+    scaled = sigma * t_noise / (np.pi / 2)  # normalize to (-sigma, sigma)
+    w_new = w + scaled
+    return np.clip(w_new, -1, 1)
 
-def tournament_selection(pop: list[Car], k: int = 3) -> Car:
-    candidates = np.random.choice(pop, k)
+def tournament_selection(pop: list[Car], rng: np.random.Generator, k: int = 5) -> Car:
+    candidates = rng.choice(pop, k, replace=False)
     return max(candidates, key=lambda c: c.fitness)
 
 def parse_args():
@@ -136,6 +199,11 @@ def parse_args():
     p.add_argument("--sigma", type=float, default=config.SIGMA)
     p.add_argument("--max_steps", type=int, default=config.MAX_STEPS)
     return p.parse_args()
+
+def hash_agent(agent: Car):
+    return tuple(np.round(w, 4).tobytes() for w in agent.weights)
+
+
 
 
 if __name__ == "__main__":
