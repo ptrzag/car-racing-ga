@@ -20,4 +20,4 @@ SPEED_BONUS = 2.0         # Positive reward factor for avg speed
 
 # Always use extended distances (17 inputs)
 USE_EXTENDED_DISTANCES = True
-ELITE_COUNT = 1  # or maybe 2
+ELITE_COUNT = 2  # or maybe 2

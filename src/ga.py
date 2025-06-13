@@ -75,7 +75,7 @@ def run_ga(
     mp.set_start_method('spawn', force=True)
 
     prev_elite_hash = None
-    
+
     for gen in range(num_generations):
         print(f"Generation {gen+1}/{num_generations}")
 
@@ -115,25 +115,27 @@ def run_ga(
         })
 
         save_generation(gen, population, out_folder)
-
-
-        elites = population[:config.ELITE_COUNT]
         new_pop = []
-        for elite in elites:
-            new_pop.append(elite)
-            mutated_weights = mutate(elite.weights.copy(), sigma * rng.uniform(1.0, 2.0), rng)
-            new_pop.append(Car(mutated_weights))
-            best_elite = population[0]
+        
+        elites = population[:config.ELITE_COUNT] 
+        if elites:
+            elites = population[:config.ELITE_COUNT]
+            best_elite = population[0]  # assign here BEFORE the loop
+            for elite in elites:
+                new_pop.append(elite)
+                mutated_weights = mutate(elite.weights.copy(), sigma * rng.uniform(1.0, 2.0), rng)
+                new_pop.append(Car(mutated_weights))
 
-        elite_hash = hash_agent(best_elite)
+            if best_elite:
+                elite_hash = hash_agent(best_elite)
+                if elite_hash != prev_elite_hash:
+                    new_pop.append(best_elite)
+                    prev_elite_hash = elite_hash
+                else:
+                    # mutate instead of copying same elite again
+                    mutated_weights = mutate(best_elite.weights.copy(), sigma, rng)
+                    new_pop.append(Car(mutated_weights))
 
-        if elite_hash != prev_elite_hash:
-            new_pop.append(best_elite)
-            prev_elite_hash = elite_hash
-        else:
-            # mutate instead of copying same elite again
-            mutated_weights = mutate(best_elite.weights.copy(), sigma, rng)
-            new_pop.append(Car(mutated_weights))
 
         while len(new_pop) < pop_size:
             if rng.random() < 0.1:
