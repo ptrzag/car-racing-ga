@@ -1,0 +1,10 @@
+{
+  "timestamp": "20250619_2151",
+  "pop_size": 40,
+  "generations": 20,
+  "p_crossover": 0.9,
+  "p_mutation": 0.2,
+  "sigma": 0.5,
+  "max_steps": 1000,
+  "seed": 71
+}

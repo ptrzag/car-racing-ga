@@ -44,7 +44,7 @@ def run_ga(
     seed: Optional[int] = None
 ) -> Car:
     if seed is None:
-        seed = int.from_bytes(os.urandom(4), "little")
+        seed = 71
     rng = np.random.default_rng(seed)
 
     feat = 17 if config.USE_EXTENDED_DISTANCES else 9
