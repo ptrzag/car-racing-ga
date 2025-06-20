@@ -32,7 +32,10 @@ def load_best_from_generation(folder: str, gen_idx: int) -> tuple[Car, int | Non
         raise ValueError("Generation file is empty.")
 
     # Find best car by fitness (skip disqualified)
-    best_data = max(cars_data, key=lambda c: c.get("fitness", float("-inf")))
+    qualified_cars = [c for c in cars_data if not c.get("disqualified", False)]
+    if not qualified_cars:
+        raise ValueError("All cars in this generation are disqualified.")
+    best_data = max(qualified_cars, key=lambda c: c.get("fitness", float("-inf")))
     weights = np.array(best_data["weights"], dtype=np.float32)
     car = Car(weights)
     car.fitness = best_data.get("fitness")
