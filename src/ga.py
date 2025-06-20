@@ -76,8 +76,21 @@ def run_ga(
 
     prev_elite_hash = None
 
+    # --- START: parametry mutacji progresywnej ---
+    sigma_start = sigma                   # np. config.SIGMA (0.5)
+    sigma_end   = getattr(config, "SIGMA_FINAL", 0.05)  # dopisz w config.py
+    # funkcja zwracająca sigma dla danej generacji
+    def sigma_for_gen(gen_idx):
+        t = gen_idx / (num_generations - 1)
+        # liniowa interpolacja od sigma_start do sigma_end
+        return sigma_start * (1 - t) + sigma_end * t
+    # --- KONIEC: parametry mutacji progresywnej ---
+
     for gen in range(num_generations):
         print(f"Generation {gen+1}/{num_generations}")
+
+        # aktualne sigma
+        sigma_gen = sigma_for_gen(gen)
 
         with mp.Pool() as pool:
             args = [(car, max_steps, seed, False) for car in population]
@@ -123,7 +136,13 @@ def run_ga(
             best_elite = population[0]  # assign here BEFORE the loop
             for elite in elites:
                 new_pop.append(elite)
-                mutated_weights = mutate(elite.weights.copy(), sigma * rng.uniform(1.0, 2.0), rng)
+                # mutated_weights = mutate(elite.weights.copy(), sigma * rng.uniform(1.0, 2.0), rng)
+                
+                 # mutujemy elite z odrobiną losowego „boostu”
+                mutated_weights = mutate(elite.weights.copy(),
+                                         sigma_gen * rng.uniform(1.0, 2.0),
+                                         rng)
+
                 new_pop.append(Car(mutated_weights))
 
             if best_elite:
@@ -151,10 +170,16 @@ def run_ga(
                 diversity_threshold = 1.0  # define a sensible threshold
                 mutation_boost = 0.2 if diversity < diversity_threshold else 0.0
 
+                #if rng.random() < p_mutation + mutation_boost:
+                #    c1_w = mutate(c1_w, sigma, rng)
+                #if rng.random() < p_mutation + mutation_boost:
+                #    c2_w = mutate(c2_w, sigma, rng)
+
                 if rng.random() < p_mutation + mutation_boost:
-                    c1_w = mutate(c1_w, sigma, rng)
+                    c1_w = mutate(c1_w, sigma_gen, rng)
+
                 if rng.random() < p_mutation + mutation_boost:
-                    c2_w = mutate(c2_w, sigma, rng)
+                    c2_w = mutate(c2_w, sigma_gen, rng)
 
                 new_pop.append(Car(c1_w))
                 if len(new_pop) < pop_size:
