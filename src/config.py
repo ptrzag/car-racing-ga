@@ -1,10 +1,10 @@
 # config.py
 
 # GA hyperparameters
-POP_SIZE = 40
+POP_SIZE = 60
 GENERATIONS = 100
-P_CROSSOVER = 0.9
-P_MUTATION = 0.2
+P_CROSSOVER = 0.8
+P_MUTATION = 0.05
 SIGMA = 0.5
 
 # Simulation settings
